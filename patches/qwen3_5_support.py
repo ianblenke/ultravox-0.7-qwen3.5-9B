@@ -33,23 +33,9 @@ def _patched_ultravox_config_init(original_init):
     """
 
     def __init__(self, *args, **kwargs):
-        # Run original init — this will set text_config and apply the existing guard
+        # The upstream guard (lines 179-182) now copies initializer_range from
+        # nested text_config for multimodal models, so original_init works directly.
         original_init(self, *args, **kwargs)
-
-        # Extend the guard: if text_config has a nested text_config (multimodal model),
-        # copy any missing attributes that Ultravox needs
-        text_config = self.text_config
-        if hasattr(text_config, "text_config"):
-            inner = text_config.text_config
-            # initializer_range is needed at line 185 of ultravox_config.py
-            if not hasattr(text_config, "initializer_range") and hasattr(
-                inner, "initializer_range"
-            ):
-                text_config.initializer_range = inner.initializer_range
-                self.initializer_range = inner.initializer_range
-                logger.debug(
-                    f"Copied initializer_range={inner.initializer_range} from nested text_config"
-                )
 
     return __init__
 
