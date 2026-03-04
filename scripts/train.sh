@@ -9,7 +9,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ULTRAVOX_DIR="$PROJECT_DIR/ultravox-upstream"
 CONFIG_PATH="$PROJECT_DIR/configs/v0.7_config_qwen3.5_9b.yaml"
 
 # Auto-detect GPUs
@@ -20,19 +19,20 @@ echo "GPUs: $NUM_GPUS"
 echo "Config: $CONFIG_PATH"
 echo ""
 
-cd "$ULTRAVOX_DIR"
+cd "$PROJECT_DIR"
 
+# Use our wrapper (train.py) which applies the Qwen 3.5 compatibility patch
+# before invoking the Ultravox training pipeline.
 if [ "$NUM_GPUS" -gt 1 ]; then
     echo "Launching distributed training with torchrun ($NUM_GPUS GPUs)..."
     poetry run torchrun \
         --nproc_per_node="$NUM_GPUS" \
-        -m ultravox.training.train \
+        train.py \
         --config_path "$CONFIG_PATH" \
         "$@"
 else
     echo "Launching single-GPU training..."
-    poetry run python \
-        -m ultravox.training.train \
+    poetry run python train.py \
         --config_path "$CONFIG_PATH" \
         "$@"
 fi

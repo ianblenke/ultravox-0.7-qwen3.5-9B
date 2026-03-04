@@ -43,21 +43,34 @@ Key stakeholders: open-source community, developers needing real-time speech AI 
 - **How**: Set `enable_thinking=False` in generation config / omit `<think>` tokens from training data
 
 ### 6. Audio Token Integration
-- **Decision**: Register `<|audio|>` as a special token in Qwen 3.5's tokenizer if not already present
-- **Why**: Ultravox uses `<|audio|>` placeholder tokens that get replaced with projected audio embeddings during forward pass
-- **Risk**: Qwen 3.5's 248K vocabulary is large — must verify token ID doesn't collide with existing special tokens
+- **Decision**: Register `<|audio|>` as a special token in Qwen 3.5's tokenizer
+- **Validated**: `<|audio|>` is available and registers as token ID 248077 with no collisions
+- **Note**: Qwen 3.5 already has `<|audio_start|>`, `<|audio_end|>`, `<|audio_pad|>` tokens for its own multimodal capabilities — these are separate from Ultravox's `<|audio|>` placeholder mechanism
+
+### 7. Multimodal Model Loading Patch (CRITICAL)
+- **Decision**: Monkey-patch `UltravoxModel._create_language_model` to handle Qwen 3.5's multimodal config
+- **Why**: Qwen 3.5 9B is `Qwen3_5ForConditionalGeneration` (multimodal vision+text), not a standard CausalLM. `AutoModelForCausalLM.from_pretrained("Qwen/Qwen3.5-9B")` fails because the architecture doesn't map to a CausalLM class.
+- **How**: The patch passes the inner `text_config` (type `Qwen3_5TextConfig`, model_type `qwen3_5_text`) to `AutoModelForCausalLM.from_pretrained()`, which resolves to `Qwen3_5ForCausalLM`. This class has `_keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]` so vision weights are automatically ignored.
+- **Implementation**: `patches/qwen3_5_support.py` — applied automatically on import
 
 ## Risks / Trade-offs
 - **Hybrid architecture compatibility**: Qwen 3.5's DeltaNet layers are novel — the Ultravox training framework may need patches to handle them correctly → Mitigation: test forward pass before full training
+- **Multimodal config complexity**: Qwen 3.5's nested config structure required a model loading patch → Mitigation: patch is minimal and isolated in `patches/qwen3_5_support.py`
 - **VRAM requirements**: 9B backbone + Whisper encoder + projector requires significant GPU memory → Mitigation: gradient checkpointing, multi-GPU with torchrun
 - **Upstream Ultravox changes**: fixie-ai/ultravox may not have first-class Qwen 3.5 support yet → Mitigation: fork and patch as needed
-- **Qwen 3.5 is brand new (2026-03-02)**: Limited community experience → Mitigation: validate basic inference before training
+- **Qwen 3.5 is brand new (2026-03-02)**: Limited community experience → Mitigation: validated config compatibility and tokenizer integration
 
 ## Migration Plan
 N/A — greenfield project, no existing model to migrate from.
 
+## Resolved Questions
+- **Audio token collision**: No collision. `<|audio|>` registers as ID 248077.
+- **Config compatibility**: Ultravox already handles nested text_config (line 179-181 of ultravox_config.py). Projector dimensions: 1280 → 4096 confirmed.
+- **Thinking mode tokens**: `<think>` (248068) and `</think>` (248069) exist and must be suppressed during generation.
+- **Dataset mix**: Using the full v0.6 multilingual recipe (same as Qwen 3 32B and Llama 3 8B configs).
+
 ## Open Questions
 - What intermediate dimension should the projector use? (Need to benchmark)
 - Should we also train a LoRA adapter on the Qwen 3.5 backbone for improved speech task performance?
-- Which speech training datasets to use? (Follow Ultravox v0.7 data mix or customize?)
 - What GPU cluster is available for training? (Determines batch size, training time)
+- Does the Gated DeltaNet architecture require special handling for knowledge distillation loss? (Need to verify during smoke test)

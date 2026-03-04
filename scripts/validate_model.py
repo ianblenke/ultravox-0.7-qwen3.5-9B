@@ -5,7 +5,7 @@ Validate that Qwen 3.5 9B works with the Ultravox architecture.
 Performs a forward pass sanity check:
   1. Load Qwen 3.5 9B config and verify dimensions
   2. Load Whisper-large-v3-turbo config and verify dimensions
-  3. Create an UltravoxConfig bridging the two
+  3. Verify tokenizer compatibility and audio token registration
   4. Optionally instantiate the model (requires GPU + significant VRAM)
 
 Usage:
@@ -16,8 +16,10 @@ import argparse
 import sys
 import os
 
-# Add ultravox-upstream to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'ultravox-upstream'))
+# Add project paths
+project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_dir)
+sys.path.insert(0, os.path.join(project_dir, "ultravox-upstream"))
 
 
 def validate_configs():
@@ -32,16 +34,39 @@ def validate_configs():
         "Qwen/Qwen3.5-9B", trust_remote_code=True
     )
     print(f"  model_type: {text_config.model_type}")
-    print(f"  hidden_size: {text_config.hidden_size}")
-    print(f"  vocab_size: {text_config.vocab_size}")
-    print(f"  num_hidden_layers: {text_config.num_hidden_layers}")
-    print(f"  max_position_embeddings: {getattr(text_config, 'max_position_embeddings', 'N/A')}")
+    print(f"  architectures: {getattr(text_config, 'architectures', 'N/A')}")
 
-    # Check for nested text_config (some multimodal models have this)
-    if hasattr(text_config, 'text_config'):
-        print(f"  NOTE: Model has nested text_config (multimodal architecture)")
-        print(f"  text_config.hidden_size: {text_config.text_config.hidden_size}")
-        print(f"  text_config.vocab_size: {text_config.text_config.vocab_size}")
+    # Qwen 3.5 is a multimodal model with nested text_config
+    # Ultravox handles this via ultravox_config.py:179-181
+    if hasattr(text_config, "text_config"):
+        inner = text_config.text_config
+        print(f"  NOTE: Multimodal model — using nested text_config")
+        print(f"  text_config.model_type: {inner.model_type}")
+        print(f"  text_config.hidden_size: {inner.hidden_size}")
+        print(f"  text_config.vocab_size: {inner.vocab_size}")
+        print(f"  text_config.num_hidden_layers: {inner.num_hidden_layers}")
+        print(
+            f"  text_config.max_position_embeddings: {getattr(inner, 'max_position_embeddings', 'N/A')}"
+        )
+        # Show hybrid architecture details
+        if hasattr(inner, "layer_types"):
+            from collections import Counter
+
+            layer_counts = Counter(inner.layer_types)
+            print(
+                f"  layer_types: {dict(layer_counts)} ({len(inner.layer_types)} total)"
+            )
+        qwen_dim = inner.hidden_size
+        qwen_vocab = inner.vocab_size
+    else:
+        print(f"  hidden_size: {text_config.hidden_size}")
+        print(f"  vocab_size: {text_config.vocab_size}")
+        print(f"  num_hidden_layers: {text_config.num_hidden_layers}")
+        print(
+            f"  max_position_embeddings: {getattr(text_config, 'max_position_embeddings', 'N/A')}"
+        )
+        qwen_dim = text_config.hidden_size
+        qwen_vocab = text_config.vocab_size
 
     # Load Whisper config
     print("\nLoading openai/whisper-large-v3-turbo config...")
@@ -54,9 +79,6 @@ def validate_configs():
 
     # Validate projector dimensions
     whisper_dim = audio_config.d_model  # 1280 for large-v3-turbo
-    qwen_dim = text_config.hidden_size
-    if hasattr(text_config, 'text_config'):
-        qwen_dim = text_config.text_config.hidden_size
 
     print(f"\n=== Projector Dimensions ===")
     print(f"  Whisper output dim: {whisper_dim}")
@@ -69,6 +91,7 @@ def validate_configs():
         "Qwen/Qwen3.5-9B", trust_remote_code=True
     )
     print(f"  Vocab size: {len(tokenizer)}")
+    print(f"  Config vocab size: {qwen_vocab}")
     print(f"  Special tokens: {tokenizer.all_special_tokens[:10]}...")
 
     # Check if <|audio|> would conflict
@@ -84,6 +107,27 @@ def validate_configs():
     audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
     print(f"  Audio token ID after registration: {audio_token_id}")
 
+    # Check Qwen 3.5 specific: thinking mode tokens
+    for token in ["<think>", "</think>"]:
+        tid = tokenizer.convert_tokens_to_ids(token)
+        if tid != tokenizer.unk_token_id:
+            print(f"  Thinking token '{token}' = ID {tid} (will be suppressed)")
+
+    # Verify CausalLM class exists for text model
+    print(f"\n=== CausalLM Compatibility ===")
+    if hasattr(text_config, "text_config"):
+        print(
+            f"  Multimodal model detected — Qwen3_5ForCausalLM will be used via patch"
+        )
+        print(
+            f"  The patch passes inner text_config to AutoModelForCausalLM.from_pretrained()"
+        )
+        print(
+            f"  This loads Qwen3_5ForCausalLM which ignores vision weights (^model.visual.*)"
+        )
+    else:
+        print(f"  Standard CausalLM model — no patch needed")
+
     print("\n=== Config validation PASSED ===")
     return text_config, audio_config
 
@@ -91,6 +135,9 @@ def validate_configs():
 def validate_full_model():
     """Instantiate the full UltravoxModel with Qwen 3.5 9B backbone."""
     import torch
+
+    # Apply the Qwen 3.5 patch
+    import patches.qwen3_5_support  # noqa: F401
     from ultravox.model.ultravox_config import UltravoxConfig
     from ultravox.model.ultravox_model import UltravoxModel
 
@@ -121,7 +168,9 @@ def validate_full_model():
     model = model.to(dtype=torch.bfloat16)
 
     total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    trainable_params = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
     print(f"  Total parameters: {total_params:,}")
     print(f"  Trainable parameters: {trainable_params:,}")
 
@@ -130,8 +179,14 @@ def validate_full_model():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Validate Ultravox + Qwen 3.5 9B compatibility")
-    parser.add_argument("--full", action="store_true", help="Full model instantiation (requires GPU)")
+    parser = argparse.ArgumentParser(
+        description="Validate Ultravox + Qwen 3.5 9B compatibility"
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Full model instantiation (requires GPU)",
+    )
     args = parser.parse_args()
 
     validate_configs()
