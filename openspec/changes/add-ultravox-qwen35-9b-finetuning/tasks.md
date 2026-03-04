@@ -13,6 +13,7 @@
 - [x] 2.5 Disable Qwen 3.5 thinking mode in generation config (suppress tokens 248068/248069)
 - [x] 2.6 Handle Qwen 3.5 multimodal config (patch: passes inner text_config to load Qwen3_5ForCausalLM)
 - [x] 2.7 Create inference script with thinking mode suppression
+- [x] 2.8 Write compatibility test suite (25 tests: config, tokenizer, chat template, patches)
 
 ## 3. Training Configuration
 - [x] 3.1 Create YAML training config for Qwen 3.5 9B backbone
