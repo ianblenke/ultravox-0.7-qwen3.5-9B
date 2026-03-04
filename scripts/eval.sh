@@ -11,11 +11,18 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ULTRAVOX_DIR="$PROJECT_DIR/ultravox-upstream"
 
 CHECKPOINT="${1:?Usage: bash scripts/eval.sh <checkpoint_path>}"
+shift  # Remove checkpoint from args so "$@" has remaining flags
+
+if [ ! -d "$ULTRAVOX_DIR" ]; then
+    echo "ERROR: ultravox-upstream not found. Run scripts/setup.sh first."
+    exit 1
+fi
 
 echo "=== Ultravox v0.7 Qwen 3.5 9B Evaluation ==="
 echo "Checkpoint: $CHECKPOINT"
 echo ""
 
+export PYTHONPATH="${PROJECT_DIR}:${ULTRAVOX_DIR}:${PYTHONPATH:-}"
 cd "$ULTRAVOX_DIR"
 
 poetry run python -m ultravox.evaluation.eval \
