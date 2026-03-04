@@ -10,8 +10,9 @@
 - [x] 2.2 Register `<|audio|>` special token in Qwen 3.5 tokenizer (verify no collision)
 - [x] 2.3 Configure UltravoxProjector dimensions (Whisper 1280 → Qwen 4096)
 - [ ] 2.4 Validate forward pass: audio input → Whisper → projector → Qwen 3.5 → text output
-- [x] 2.5 Disable Qwen 3.5 thinking mode in generation config
-- [x] 2.6 Handle any Qwen 3.5 hybrid DeltaNet architecture compatibility issues
+- [x] 2.5 Disable Qwen 3.5 thinking mode in generation config (suppress tokens 248068/248069)
+- [x] 2.6 Handle Qwen 3.5 multimodal config (patch: passes inner text_config to load Qwen3_5ForCausalLM)
+- [x] 2.7 Create inference script with thinking mode suppression
 
 ## 3. Training Configuration
 - [x] 3.1 Create YAML training config for Qwen 3.5 9B backbone
