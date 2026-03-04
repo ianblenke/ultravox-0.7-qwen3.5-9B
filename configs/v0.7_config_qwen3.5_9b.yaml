@@ -14,6 +14,10 @@
 text_model: "Qwen/Qwen3.5-9B"
 audio_model: "openai/whisper-large-v3-turbo"
 
+# Custom chat template without Qwen 3.5's thinking mode (<think>/<think>).
+# The default template always injects thinking tokens which interfere with KD training.
+chat_template: "file://configs/chat_template_no_think.jinja"
+
 audio_model_lora_config:
   r: 8
 

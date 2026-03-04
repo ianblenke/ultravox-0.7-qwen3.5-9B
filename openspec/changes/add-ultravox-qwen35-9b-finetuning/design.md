@@ -40,7 +40,8 @@ Key stakeholders: open-source community, developers needing real-time speech AI 
 ### 5. Thinking Mode
 - **Decision**: Disable Qwen 3.5's thinking/chain-of-thought mode for real-time speech
 - **Why**: Thinking mode adds latency unsuitable for real-time speech applications
-- **How**: Set `enable_thinking=False` in generation config / omit `<think>` tokens from training data
+- **Finding**: Qwen 3.5's default chat template **always** injects `<think>` tokens, even with `enable_thinking=False` (it adds empty `<think>\n\n</think>\n\n`). This would corrupt KD training.
+- **How**: Custom chat template (`configs/chat_template_no_think.jinja`) that strips all thinking logic. Uses standard Qwen `<|im_start|>`/`<|im_end|>` format without any `<think>` injection. Generation config also suppresses thinking token IDs (248068/248069) during inference.
 
 ### 6. Audio Token Integration
 - **Decision**: Register `<|audio|>` as a special token in Qwen 3.5's tokenizer
@@ -66,8 +67,12 @@ N/A — greenfield project, no existing model to migrate from.
 ## Resolved Questions
 - **Audio token collision**: No collision. `<|audio|>` registers as ID 248077.
 - **Config compatibility**: Ultravox already handles nested text_config (line 179-181 of ultravox_config.py). Projector dimensions: 1280 → 4096 confirmed.
-- **Thinking mode tokens**: `<think>` (248068) and `</think>` (248069) exist and must be suppressed during generation.
+- **Thinking mode tokens**: `<think>` (248068) and `</think>` (248069) exist and must be suppressed during generation. Custom chat template strips them from training data.
 - **Dataset mix**: Using the full v0.6 multilingual recipe (same as Qwen 3 32B and Llama 3 8B configs).
+- **LlamaPreTrainedModel inheritance**: Not an issue — used as generic PreTrainedModel, same pattern works for Qwen 3 32B and Gemma 3 27B.
+- **LlamaRMSNorm**: Just a standard RMSNorm implementation, no Llama-specific behavior.
+- **EOS as audio replacement**: Works fine — used internally by processor for VLLM compatibility, not for training semantics.
+- **Chat template**: Qwen 3.5's default template always injects `<think>` tokens. Fixed with custom template.
 
 ## Open Questions
 - What intermediate dimension should the projector use? (Need to benchmark)
