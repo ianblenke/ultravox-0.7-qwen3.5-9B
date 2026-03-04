@@ -1,0 +1,49 @@
+# Upstream clone (not tracked — clone via scripts/setup.sh)
+ultravox-upstream/
+
+# Training outputs
+runs/
+checkpoints/
+*.pt
+*.bin
+*.safetensors
+
+# Model weights (too large for git)
+*.gguf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# HuggingFace cache
+.cache/
+
+# Logs
+*.log
+wandb/
+tensorboard/
+
+# Environment
+.env
+.env.local

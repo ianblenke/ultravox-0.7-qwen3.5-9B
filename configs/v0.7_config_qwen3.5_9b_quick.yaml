@@ -1,0 +1,32 @@
+# Quick validation config for Ultravox v0.7 Qwen 3.5 9B
+# Use this for smoke testing before full training runs.
+#
+# Usage:
+#   bash scripts/train.sh --config_path configs/v0.7_config_qwen3.5_9b_quick.yaml
+
+text_model: "Qwen/Qwen3.5-9B"
+audio_model: "openai/whisper-large-v3-turbo"
+
+audio_model_lora_config:
+  r: 8
+
+# Minimal dataset for validation
+train_sets:
+  - name: librispeech-clean-continuation
+  - name: librispeech-clean-transcription
+
+val_sets:
+  - name: peoplespeech-clean-transcription
+
+eval_sets:
+  - name: librispeech-clean-transcription
+
+# Quick run: 200 steps
+lr: 3e-4
+lr_warmup_steps: 50
+batch_size: 4
+grad_accum_steps: 1
+max_steps: 200
+val_steps: 50
+save_steps: 100
+logging_steps: 10
