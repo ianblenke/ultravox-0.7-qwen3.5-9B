@@ -56,6 +56,22 @@ def _patch_config_post_init():
     TrainConfig.__post_init__ = patched_post_init
 
 
+# Patch huggingface_hub compatibility: evaluate library references HfFolder
+# which was removed in huggingface_hub >= 1.0. Provide a shim.
+import huggingface_hub.hf_api
+if not hasattr(huggingface_hub.hf_api, "HfFolder"):
+    class _HfFolderShim:
+        @staticmethod
+        def get_token():
+            from huggingface_hub import HfApi
+            return HfApi().token
+    huggingface_hub.hf_api.HfFolder = _HfFolderShim
+    # Also patch the top-level module since some code does `from huggingface_hub import HfFolder`
+    import huggingface_hub
+    if not hasattr(huggingface_hub, "HfFolder"):
+        huggingface_hub.HfFolder = _HfFolderShim
+
+
 # Apply Qwen 3.5 compatibility patch BEFORE importing ultravox training
 import patches.qwen3_5_support  # noqa: F401
 

@@ -10,6 +10,10 @@
 #   Loss: Knowledge distillation (KL divergence against frozen Qwen 3.5 text-only logits)
 #   Precision: bf16 only (no QLoRA — DeltaNet layers have high quantization error)
 #   Distributed: FSDP across multiple GPUs
+#
+# NOTE: Several fixie-ai private datasets have been commented out because they are
+# not publicly accessible: wenetspeech, multilingual_librispeech, IndicVoices_a,
+# Shrutilipi_a, Kathbath, SeamlessAlign, musan-segments-v2, common_voice_17_0-musan
 
 text_model: "Qwen/Qwen3.5-9B"
 audio_model: "openai/whisper-large-v3-turbo"
@@ -22,6 +26,9 @@ audio_model_lora_config:
   r: 8
 
 # --- Dataset mix (following Ultravox v0.6 multilingual recipe) ---
+# Datasets using inaccessible fixie-ai repos have been removed:
+#   wenetspeech, multilingual_librispeech, indicvoices, shrutilipi,
+#   kathbath, seamless, musan, commonvoice-musan
 train_sets:
   # English ASR continuation
   - name: librispeech-clean-continuation
@@ -33,13 +40,7 @@ train_sets:
   - name: librispeech-other-transcription
   - name: peoplespeech-clean-transcription
   - name: gigaspeech-xl-transcription
-  # Chinese (Qwen excels at CJK languages)
-  - name: wenetspeech-continuation
-  - name: wenetspeech-transcription
-  # Multilingual continuation
-  - name: multilingual_librispeech-nl-continuation
-  - name: multilingual_librispeech-pt-continuation
-    weight: 3
+  # Multilingual continuation (commonvoice only — multilingual_librispeech is private)
   - name: commonvoice-en-continuation
   - name: commonvoice-ar-continuation
     weight: 3
@@ -125,9 +126,6 @@ train_sets:
   - name: commonvoice-bn-continuation
     weight: 3
   # Multilingual transcription
-  - name: multilingual_librispeech-nl-transcription
-  - name: multilingual_librispeech-pt-transcription
-    weight: 3
   - name: commonvoice-en-transcription
   - name: commonvoice-ar-transcription
     weight: 3
@@ -250,37 +248,11 @@ train_sets:
   - name: covost2-tr-en
   - name: covost2-zh-en
     weight: 3
-  # Hindi-specific datasets
-  - name: indicvoices-hi-transcription
-    weight: 2
-  - name: shrutilipi-hi-transcription
-    weight: 1
-  - name: kathbath-hi-transcription
-    weight: 3
-  - name: seamless-hi-transcription
-    weight: 1
-  - name: indicvoices-hi-continuation
-    weight: 2
-  - name: shrutilipi-hi-continuation
-    weight: 1
-  - name: kathbath-hi-continuation
-    weight: 2
-  - name: seamless-hi-continuation
-    weight: 1
-  # Noise robustness
-  - name: musan-noise
-    weight: 100
-  - name: commonvoice-musan-en-transcription
-    weight: 10
-  - name: commonvoice-musan-en-continuation
-    weight: 10
 
 val_sets:
   - name: covost2-en-de
   - name: covost2-zh-en
   - name: peoplespeech-clean-transcription
-  - name: kathbath-hi-transcription
-  - name: indicvoices-hi-transcription
 
 eval_sets:
   - name: covost2-en-de
@@ -289,24 +261,25 @@ eval_sets:
   - name: covost2-zh-en
   - name: librispeech-clean-transcription
   - name: librispeech-other-transcription
-  - name: fleurs-hi_in-transcription
   - name: commonvoice-en-transcription
   - name: commonvoice-es-transcription
   - name: commonvoice-ru-transcription
   - name: commonvoice-hi-transcription
-  - name: musan-noise-partial-match
-  - name: musan-transcription-partial-match
 
 # --- Training hyperparameters ---
 # Qwen 3.5 9B is between Llama 8B and Qwen 32B in size.
 # Using settings between the 8B (lr=1e-4, batch=12) and 32B (lr=5e-4, batch=8) configs.
 lr: 3e-4
 lr_warmup_steps: 1000
-batch_size: 8
-grad_accum_steps: 2
+batch_size: 12
+grad_accum_steps: 1
 
 max_steps: -1
 val_steps: 0.01
 save_steps: 0.1
 logging_steps: 100
 use_fsdp: True
+
+# Speed optimizations
+bf16_training: True
+num_workers: 4
